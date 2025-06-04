@@ -80,7 +80,7 @@ def draw_hexagon(x, y, color):
     pygame.draw.polygon(screen, color, points)
     pygame.draw.polygon(screen, colors["border"], points, 2)
 
-def draw_text(text, x, y, font_size=20, alignment="left"):
+def draw_text(text, x, y, font_size=24, alignment="left"):
     """Draw text on the screen with specified alignment."""
     font = pygame.font.Font(None, font_size)
     text_surface = font.render(text, True, colors["border"])
@@ -104,12 +104,12 @@ if __name__ == "__main__":
     board = (6, 10)
 
     # Hexagon properties
-    radius = 30
+    radius = 40
     height = math.sqrt(3) * radius
     width = 2 * radius * 0.75
 
     # Screen setup
-    screen_padding = 60
+    screen_padding = 80
     screen_width = int(board[1] * width + screen_padding * 1.25)
     screen_height = int(board[0] * height + 300)
 
@@ -137,7 +137,7 @@ if __name__ == "__main__":
         # Draw title
         grid_width = screen_padding / 2
         grid_height = board[0] * height + screen_padding * 2
-        draw_text("Search Algorithm Visualization", grid_width, grid_height, 24)
+        draw_text("Search Algorithm Visualization", grid_width, grid_height)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
