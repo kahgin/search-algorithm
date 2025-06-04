@@ -123,17 +123,20 @@ def get_neighbors_with_t3_effect(current, path):
             
         # If stepping on T3, we get forced to move 2 more steps in the same direction
         if neighbor in special_hexagons["T3"]["coordinate"]:
-            # Calculate the forced destination (2 more steps in same direction)
-            forced_pos = (neighbor[0] + dx * 2, neighbor[1] + dy * 2)
+            # Calculate intermediate position (1 step from T3)
+            intermediate_pos = (neighbor[0] + dx, neighbor[1] + dy)
+            # Calculate final position (2 steps from T3)
+            final_pos = (neighbor[0] + dx * 2, neighbor[1] + dy * 2)
             
-            # Check if forced position is valid and not an obstacle
-            if is_valid(forced_pos) and not is_obstacle(forced_pos):
-                # Add the T3 neighbor with its final forced destination
-                neighbors.append((neighbor, forced_pos, True))  # True indicates T3 effect
-            # If forced position is invalid, we can't use this move at all
+            # Check if both intermediate and final positions are valid and not obstacles
+            if (is_valid(intermediate_pos) and not is_obstacle(intermediate_pos) and
+                is_valid(final_pos) and not is_obstacle(final_pos)):
+                # Add the T3 neighbor with both intermediate and final positions
+                neighbors.append((neighbor, intermediate_pos, final_pos, True))  # True indicates T3 effect
+            # If either position is invalid, we can't use this move at all
         else:
             # Normal movement
-            neighbors.append((neighbor, neighbor, False))  # False indicates no T3 effect
+            neighbors.append((neighbor, neighbor, neighbor, False))  # False indicates no T3 effect
     
     return neighbors
 
@@ -163,27 +166,39 @@ def astar_collect_all_treasures(start):
         # Get neighbors with T3 effect handling
         neighbors = get_neighbors_with_t3_effect(current, path)
         
-        for step_pos, final_pos, is_t3_effect in neighbors:
+        for step_pos, intermediate_pos, final_pos, is_t3_effect in neighbors:
             # Check T4 restriction (can't step on T4 if we have treasures)
             if step_pos in special_hexagons.get("T4", {}).get("coordinate", []) and new_collected:
+                continue
+            if intermediate_pos in special_hexagons.get("T4", {}).get("coordinate", []) and new_collected:
                 continue
             if final_pos in special_hexagons.get("T4", {}).get("coordinate", []) and new_collected:
                 continue
             
-            # Calculate cost for the step
-            cost, new_energy = calculate_step_cost(current, step_pos, special_hexagons, energy_multiplier)
-            
-            # Update collected treasures for the final position
-            final_collected = set(new_collected)
-            if final_pos in treasures:
-                final_collected.add(final_pos)
-            
-            # Create the new path
             if is_t3_effect:
-                # T3 effect: add both the T3 position and the forced final position
-                new_path = path + [step_pos, final_pos]
+                cost1, energy1 = calculate_step_cost(current, step_pos, special_hexagons, energy_multiplier)
+                cost2, energy2 = calculate_step_cost(step_pos, intermediate_pos, special_hexagons, energy1)
+                cost3, final_energy = calculate_step_cost(intermediate_pos, final_pos, special_hexagons, energy2)
+                total_cost = cost1 + cost2 + cost3
+                new_energy = final_energy
+                
+                # Check for treasures at each position
+                final_collected = set(new_collected)
+                if step_pos in treasures:
+                    final_collected.add(step_pos)
+                if intermediate_pos in treasures:
+                    final_collected.add(intermediate_pos)
+                if final_pos in treasures:
+                    final_collected.add(final_pos)
+                
+                new_path = path + [step_pos, intermediate_pos, final_pos]
             else:
-                # Normal move
+                total_cost, new_energy = calculate_step_cost(current, step_pos, special_hexagons, energy_multiplier)
+                
+                final_collected = set(new_collected)
+                if final_pos in treasures:
+                    final_collected.add(final_pos)
+                
                 new_path = path + [final_pos]
             
             # Calculate heuristic to nearest uncollected treasure
@@ -192,7 +207,7 @@ def astar_collect_all_treasures(start):
             else:
                 h = 0
             
-            heappush(open_set, (g + cost + h, final_pos, frozenset(final_collected), new_energy, g + cost, new_path))
+            heappush(open_set, (g + total_cost + h, final_pos, frozenset(final_collected), new_energy, g + total_cost, new_path))
     
     return [], float('inf')
 
