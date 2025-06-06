@@ -2,6 +2,7 @@ import pygame
 import math
 from heapq import heappush, heappop
 
+# color for different cell types
 cell_colors = {
     "default": (240, 240, 240),  # white for default cell
     "trap": (206, 147, 216),     # purple for trap cell
@@ -13,6 +14,7 @@ cell_colors = {
     "player": (255, 0, 0),       # red for current position
 }
 
+# Definition of special hexagons on the map with their coordinates and colors
 hexagons_legend = {
     "T1": {"coordinate": [(8,2)], "color": cell_colors["trap"]},
     "T2": {"coordinate": [(1,1), (2,4)], "color": cell_colors["trap"]},
@@ -24,17 +26,22 @@ hexagons_legend = {
     "O": {"coordinate": [(0,3), (2,2), (3,3), (4,2), (4,4), (6,3), (6,4), (7,4), (8,1)], "color": cell_colors["obstacle"]},
 }
 
+# Movement patterns for odd and even columns in hexagonal grid
 moves_odd = [(0, -1), (0, 1), (1, -1), (-1, -1), (1, 0), (-1, 0)]
 moves_even = [(0, -1), (0, 1), (1, 0), (-1, 0), (1, 1), (-1, 1)]
 
+# Map configuration
 map_size = (6, 10)
 map_redius = 30
 map_height = math.sqrt(3) * map_redius
 map_width = 2 * map_redius * 0.75
+
+# Screen dimensions
 screen_padding = map_redius * 2
 screen_width = int(map_size[1] * map_width + screen_padding * 1.25)
 screen_height = int(map_size[0] * map_height + 300)
 
+# Function to draw a hexagon at given coordinates
 def draw_hexagon(x, y, color):
     points = [
         (x + map_redius * math.cos(math.radians(angle)),
@@ -44,6 +51,7 @@ def draw_hexagon(x, y, color):
     pygame.draw.polygon(screen, color, points)
     pygame.draw.polygon(screen, cell_colors["border"], points, 2)
 
+# Function to put text on the screen
 def put_text(text, x, y, font_size=24, alignment="left", width_max=None):
     font = pygame.font.Font(None, font_size)
 
@@ -76,18 +84,23 @@ def put_text(text, x, y, font_size=24, alignment="left", width_max=None):
                 text_rectangle = surface_text.get_rect(topleft=(x, y + i * font_size))
             screen.blit(surface_text, text_rectangle)
 
+# Function to check if a coordinate is valid within the map boundaries
 def is_valid(coordinate):
     return 0 <= coordinate[0] < map_size[1] and 0 <= coordinate[1] < map_size[0]
 
+# Function to check if a coordinate is an obstacle
 def is_obstacle(coord):
     return coord in hexagons_legend["O"]["coordinate"]
 
+# Function to get possible moves based on the column parity (even/odd)
 def get_moves(coord):
     return moves_even if coord[0] % 2 == 0 else moves_odd
 
+# Heuristic function for A* algorithm (Manhattan distance)
 def heuristic(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
+# Function to calculate the step cost and energy multiplier based on special hexagons
 def stepcost_calc(current, neighbor, special_hexagons, energy_multiply):
     base_cost = 1
     new_energy = energy_multiply
@@ -105,6 +118,7 @@ def stepcost_calc(current, neighbor, special_hexagons, energy_multiply):
                 new_energy *= 0.5
     return base_cost * energy_multiply, new_energy
 
+# Function to get neighbors of the current position, considering T3 forced movement
 def get_neighbors_with_t3_effect(current, path):
     """Get all possible neighbors, handling T3 forced movement."""
     neighbors = []
@@ -127,6 +141,8 @@ def get_neighbors_with_t3_effect(current, path):
     
     return neighbors
 
+# Function to collect treasures using A* algorithm
+# This function finds the optimal path to collect all treasures while avoiding traps and obstacles.
 def collect_treasure(start):
     treasures = set(hexagons_legend["TR"]["coordinate"])
     open_set = []
@@ -198,6 +214,8 @@ def collect_treasure(start):
     
     return [], float('inf')
 
+# Function to visualize the path found by the A* algorithm
+# This function displays the path on the screen, allowing the user to step through it.
 def path_visualization(path):
     clock = pygame.time.Clock()
     step_count = 0
