@@ -2,7 +2,7 @@ import pygame
 import math
 from heapq import heappush, heappop
 
-# color for different cell types
+# Color definitions
 cell_colors = {
     "default": (240, 240, 240),  # white for default cell
     "trap": (206, 147, 216),     # purple for trap cell
@@ -14,7 +14,7 @@ cell_colors = {
     "player": (255, 0, 0),       # red for current position
 }
 
-# Definition of special hexagons on the map with their coordinates and colors
+# Special hexagon definitions
 hexagons_legend = {
     "T1": {"coordinate": [(8,2)], "color": cell_colors["trap"]},
     "T2": {"coordinate": [(1,1), (2,4)], "color": cell_colors["trap"]},
@@ -26,7 +26,7 @@ hexagons_legend = {
     "O": {"coordinate": [(0,3), (2,2), (3,3), (4,2), (4,4), (6,3), (6,4), (7,4), (8,1)], "color": cell_colors["obstacle"]},
 }
 
-# Movement patterns for odd and even columns in hexagonal grid
+# Movement patterns for hexagonal grid
 moves_odd = [(0, -1), (0, 1), (1, -1), (-1, -1), (1, 0), (-1, 0)]
 moves_even = [(0, -1), (0, 1), (1, 0), (-1, 0), (1, 1), (-1, 1)]
 
@@ -41,15 +41,22 @@ screen_padding = map_radius * 2
 screen_width = int(map_size[1] * map_width + screen_padding * 1.25)
 screen_height = int(map_size[0] * map_height + 300)
 
-# Global game state holder
+# Helper function to get cell type at coordinate
+def get_cell_type(coord):
+    """Return the type of special cell at given coordinate, or None if default"""
+    for cell_type, data in hexagons_legend.items():
+        if coord in data["coordinate"]:
+            return cell_type
+    return None
+
 class GameState:
     def __init__(self):
         self.energy = 1.0
 
 game_state = GameState()
 
-# Function to draw a hexagon at given coordinates
 def draw_hexagon(x, y, color):
+    """Draw a hexagon at given coordinates"""
     points = [
         (x + map_radius * math.cos(math.radians(angle)),
          y + map_radius * math.sin(math.radians(angle)))
@@ -58,8 +65,8 @@ def draw_hexagon(x, y, color):
     pygame.draw.polygon(screen, color, points)
     pygame.draw.polygon(screen, cell_colors["border"], points, 2)
 
-# Function to put text on the screen
 def put_text(text, x, y, font_size=24, alignment="left", width_max=None):
+    """Render text on screen with optional word wrapping"""
     font = pygame.font.Font(None, font_size)
 
     if width_max is None:
@@ -77,8 +84,10 @@ def put_text(text, x, y, font_size=24, alignment="left", width_max=None):
             if font.size(test_line)[0] <= width_max:
                 current = test_line
             else:
-                lines.append(current); current = word
-        if current: lines.append(current)
+                lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
 
         for i, line in enumerate(lines):
             surface = font.render(line, True, cell_colors["border"])
@@ -88,60 +97,82 @@ def put_text(text, x, y, font_size=24, alignment="left", width_max=None):
                 rect = surface.get_rect(topleft=(x, y + i * font_size))
             screen.blit(surface, rect)
 
-# Function to check if a coordinate is valid within the map boundaries
-def is_valid(coord):
+def is_valid_coord(coord):
+    """Check if coordinate is within map boundaries"""
     return 0 <= coord[0] < map_size[1] and 0 <= coord[1] < map_size[0]
 
-# Function to check if a coordinate is an obstacle
 def is_obstacle(coord):
-    return coord in hexagons_legend["O"]["coordinate"]
+    """Check if coordinate is an obstacle"""
+    return get_cell_type(coord) == "O"
 
-# Function to get possible moves based on the column parity (even/odd)
 def get_moves(coord):
+    """Get possible moves based on column parity"""
     return moves_even if coord[0] % 2 == 0 else moves_odd
 
-# Heuristic function for A* algorithm (Manhattan distance)
 def heuristic(a, b):
+    """Manhattan distance heuristic for A*"""
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
-# Function to calculate the step cost
-def stepcost_calc(neighbor):
-    step = 1
-    energy = game_state.energy
-    coords = neighbor
+def calculate_step_cost(coord):
+    """Calculate step cost and energy multiplier for a coordinate"""
+    step_cost = 1
+    energy_multiplier = game_state.energy
+    cell_type = get_cell_type(coord)
+    
+    if cell_type == "T1":
+        energy_multiplier *= 2
+    elif cell_type == "T2":
+        step_cost *= 2
+    elif cell_type == "R1":
+        energy_multiplier *= 0.5
+    elif cell_type == "R2":
+        step_cost *= 0.5
 
-    if coords in hexagons_legend.get("T1", {}).get("coordinate", []):
-        energy *= 2
-    elif coords in hexagons_legend.get("T2", {}).get("coordinate", []):
-        step *= 2
-    elif coords in hexagons_legend.get("R1", {}).get("coordinate", []):
-        energy *= 0.5
-    elif coords in hexagons_legend.get("R2", {}).get("coordinate", []):
-        step *= 0.5
+    return step_cost, energy_multiplier
 
-    return step, energy
-
-# Function to get neighbors of the current position, considering T3 forced movement
 def get_neighbors(current):
+    """Get valid neighbors, handling T3 forced movement"""
     neighbors = []
     
     for dx, dy in get_moves(current):
         nbr = (current[0] + dx, current[1] + dy)
-        if not is_valid(nbr) or is_obstacle(nbr): 
+        if not is_valid_coord(nbr) or is_obstacle(nbr): 
             continue
-        if nbr in hexagons_legend["T3"]["coordinate"]:
+            
+        if get_cell_type(nbr) == "T3":
+            # T3 forces movement through two additional cells
             interm = (nbr[0] + dx, nbr[1] + dy)
             final = (nbr[0] + 2 * dx, nbr[1] + 2 * dy)
-            if is_valid(interm) and not is_obstacle(interm) and is_valid(final) and not is_obstacle(final):
+            if (is_valid_coord(interm) and not is_obstacle(interm) and is_valid_coord(final) and not is_obstacle(final)):
                 neighbors.append((nbr, interm, final, True))
         else:
             neighbors.append((nbr, nbr, nbr, False))
     return neighbors
 
-# Function to collect treasures using A* algorithm
-# This function finds the optimal path to collect all treasures while avoiding traps and obstacles.
+def update_treasure_collection(coord, collected):
+    """Update treasure collection state"""
+    new_collected = set(collected)
+    if get_cell_type(coord) == "TR":
+        new_collected.add(coord)
+    return new_collected
+
+def calculate_path_cost(segments):
+    """Calculate total cost for a path segment"""
+    total_cost = 0
+    backup_energy = game_state.energy
+    
+    for start, end in segments:
+        step_cost, energy_multiplier = calculate_step_cost(start)
+        total_cost += step_cost * energy_multiplier
+        game_state.energy = energy_multiplier
+    
+    # Restore energy state
+    game_state.energy = backup_energy
+    return total_cost
+
 def collect_treasure(start):
-    treasures = set(hexagons_legend["TR"]["coordinate"])
+    """Find optimal path to collect all treasures using A*"""
+    treasure_coords = set(hexagons_legend["TR"]["coordinate"])
     open_set = []
     heappush(open_set, (0, start, frozenset(), 0, [start]))
     visited = set()
@@ -149,154 +180,181 @@ def collect_treasure(start):
     while open_set:
         f, current, collected, g, path = heappop(open_set)
         state = (current, collected)
+        
         if state in visited:
             continue
         visited.add(state)
 
-        # Check if we have collected a treasure at current position
-        new_collected = set(collected)
-        if current in treasures:
-            new_collected.add(current)
+        # Update treasure collection
+        new_collected = update_treasure_collection(current, collected)
 
-        # Check if we have collected all treasures
-        if len(new_collected) == len(treasures):
+        # Check if all treasures collected
+        if len(new_collected) == len(treasure_coords):
             return path, g
 
+        # Explore neighbors
         for step, interm, final, is_t3 in get_neighbors(current):
-            if new_collected and any(p in hexagons_legend.get("T4", {}).get("coordinate", []) for p in (step, interm, final)):
+            # Skip if T4 trap would clear treasures
+            if new_collected and any(get_cell_type(p) == "T4" for p in (step, interm, final)):
                 continue
 
-            backup = game_state.energy
-            temp_collected, temp_path = set(new_collected), list(path)
-            cost = 0
+            temp_collected = set(new_collected)
+            temp_path = list(path)
+            
+            # Calculate segments for movement
+            segments = [(current, step), (step, interm), (interm, final)] if is_t3 else [(current, final)]
+            cost = calculate_path_cost(segments)
+            
+            # Update collection and path for each segment
+            for _, end_coord in segments:
+                temp_collected = update_treasure_collection(end_coord, temp_collected)
+                temp_path.append(end_coord)
 
-            if is_t3:
-                segs = [(current, step), (step, interm), (interm, final)]
-            else:
-                segs = [(current, final)]
+            # Calculate heuristic
+            remaining_treasures = treasure_coords - temp_collected
+            h = min(heuristic(final, t) for t in remaining_treasures) if remaining_treasures else 0
 
-            for a, b in segs:
-                step, energy = stepcost_calc(a)
-                cost += step * energy
-                game_state.energy = energy  # update multiplier after each move
-                if b in treasures:
-                    temp_collected.add(b)
-                temp_path.append(b)
-
-            h = min(heuristic(final, t) for t in (treasures - temp_collected)) if temp_collected != treasures else 0
             heappush(open_set, (g + cost + h, final, frozenset(temp_collected), g + cost, temp_path))
-            game_state.energy = backup
 
     return [], float('inf')
 
-# Function to visualize the path found by the A* algorithm
-# This function displays the path on the screen, allowing the user to step through it.
+class PathState:
+    """Manages path visualization state"""
+    def __init__(self):
+        self.step = 0
+        self.collected = set()
+        self.total_step_cost = 1.0
+        self.total_energy = 1.0
+        self.auto = True
+        self.delay = 500
+        self.last_update = pygame.time.get_ticks()
+
+    def update_costs_to_step(self, path, target_step):
+        """Update costs and collection state up to target step"""
+        self.total_step_cost = 1.0
+        self.total_energy = 1.0
+        self.collected.clear()
+        game_state.energy = 1.0
+
+        for i in range(target_step):
+            prev_coord = path[i]
+            next_coord = path[i + 1]
+            
+            step_cost, energy_multiplier = calculate_step_cost(prev_coord)
+            energy_cost = step_cost * energy_multiplier
+            
+            self.total_step_cost += step_cost
+            self.total_energy += energy_cost
+            game_state.energy = energy_multiplier
+            
+            # Update treasure collection
+            if get_cell_type(next_coord) == "TR":
+                self.collected.add(next_coord)
+            if get_cell_type(next_coord) == "T4":
+                self.collected.clear()
+
+    def advance_step(self, path):
+        """Advance to next step"""
+        if self.step < len(path) - 1:
+            prev_coord = path[self.step]
+            next_coord = path[self.step + 1]
+            
+            step_cost, energy_multiplier = calculate_step_cost(prev_coord)
+            energy_cost = step_cost * energy_multiplier
+            
+            self.total_step_cost += step_cost
+            self.total_energy += energy_cost
+            game_state.energy = energy_multiplier
+            
+            if get_cell_type(next_coord) == "TR":
+                self.collected.add(next_coord)
+            if get_cell_type(next_coord) == "T4":
+                self.collected.clear()
+                
+            self.step += 1
+
+def render_game_state(path, path_state):
+    """Render the current game state"""
+    screen.fill(cell_colors["default"])
+    labels = []
+    
+    # Draw hexagonal grid
+    for row in range(map_size[0]):
+        for col in range(map_size[1]):
+            x = col * map_width
+            y = row * map_height + (map_height / 2 if col % 2 == 0 else 0)
+            sx, sy = x + screen_padding, y + screen_padding
+            coord = (col, row)
+            
+            # Determine cell color and label
+            color = cell_colors["default"]
+            label = ""
+            for k, v in hexagons_legend.items():
+                if coord in v["coordinate"]:
+                    color = v["color"]
+                    label = k
+                    break
+                    
+            draw_hexagon(sx, sy, color)
+            if label:
+                labels.append((sx, sy, label))
+
+    # Draw path
+    for i in range(path_state.step + 1):
+        c0, r0 = path[i]
+        x = c0 * map_width
+        y = r0 * map_height + (map_height / 2 if c0 % 2 == 0 else 0)
+        sx, sy = x + screen_padding, y + screen_padding
+        
+        color = cell_colors["player"] if i == path_state.step else cell_colors["path"]
+        draw_hexagon(sx, sy, color)
+
+    # Draw labels
+    for x, y, lab in labels:
+        put_text(lab, x, y, font_size=24, alignment="center")
+
+    # Draw UI information
+    put_text(f"Total Step Cost: {round(path_state.total_step_cost, 2)}", 10, screen_height - 120)
+    put_text(f"Total Energy: {round(path_state.total_energy, 2)}", 10, screen_height - 100)
+    put_text(f"Treasures Collected: {len(path_state.collected)}", 10, screen_height - 80)
+    put_text("Path: ", 10, screen_height - 60)
+    put_text(str(path[:path_state.step+1]), 60, screen_height - 60, width_max=screen_width - 80)
+    put_text("Use LEFT and RIGHT arrow keys to move through the path", screen_width // 2, screen_height - 170, alignment="center")
+
 def path_visualization(path):
+    """Visualize the pathfinding solution"""
     clock = pygame.time.Clock()
-    step = 0
-    auto = True
-    delay = 500
-    last = pygame.time.get_ticks()
-    collected = set()
-    total_step_cost = 0
-    total_energy = 0
-    game_state.energy = 1.0
+    path_state = PathState()
 
     while True:
-        screen.fill(cell_colors["default"])
-        labels = []
-        for row in range(map_size[0]):
-            for col in range(map_size[1]):
-                x = col * map_width
-                y = row * map_height + (map_height / 2 if col % 2 == 0 else 0)
-                sx, sy = x + screen_padding, y + screen_padding
-                coord = (col, row)
-                color = cell_colors["default"]
-                label = ""
-                for k, v in hexagons_legend.items():
-                    if coord in v["coordinate"]:
-                        color = v["color"]
-                        label = k
-                        break
-                draw_hexagon(sx, sy, color)
-                if label:
-                    labels.append((sx, sy, label))
-
-        for i in range(step + 1):
-            c0, r0 = path[i]
-            x = c0 * map_width
-            y = r0 * map_height + (map_height / 2 if c0 % 2 == 0 else 0)
-            sx, sy = x + screen_padding, y + screen_padding
-            draw_hexagon(sx, sy, cell_colors["player"] if i == step else cell_colors["path"])
-
-        for x, y, lab in labels:
-            put_text(lab, x, y, font_size=24, alignment="center")
-
-        put_text(f"Total Step Cost: {round(total_step_cost, 2)}", 10, screen_height - 120)
-        put_text(f"Total Energy: {round(total_energy, 2)}", 10, screen_height - 100)
-        put_text(f"Treasures Collected: {len(collected)}", 10, screen_height - 80)
-        put_text("Path: ", 10, screen_height - 60)
-        put_text(str(path[:step+1]), 60, screen_height - 60, width_max=screen_width - 80)
-        put_text("Use LEFT and RIGHT arrow keys to move through the path", screen_width // 2, screen_height - 170, alignment="center")
-
+        render_game_state(path, path_state)
         pygame.display.flip()
         clock.tick(60)
 
-        if auto and pygame.time.get_ticks() - last >= delay:
-            if step < len(path) - 1:
-                prev, curr = path[step], path[step + 1]
-                step_cost, energy_multiplier = stepcost_calc(prev)
-                energy_cost = step_cost * energy_multiplier
-                total_step_cost += step_cost
-                total_energy += energy_cost
-                game_state.energy = energy_multiplier
-                if curr in hexagons_legend["TR"]["coordinate"]:
-                    collected.add(curr)
-                if curr in hexagons_legend.get("T4", {}).get("coordinate", []):
-                    collected.clear()
-                step += 1
-                last = pygame.time.get_ticks()
+        # Auto-advance logic
+        if path_state.auto and pygame.time.get_ticks() - path_state.last_update >= path_state.delay:
+            if path_state.step < len(path) - 1:
+                path_state.advance_step(path)
+                path_state.last_update = pygame.time.get_ticks()
             else:
-                auto = False
+                path_state.auto = False
 
+        # Handle events
         for evt in pygame.event.get():
             if evt.type == pygame.QUIT:
                 return
-            elif evt.type == pygame.KEYDOWN and not auto:
-                if evt.key == pygame.K_RIGHT and step < len(path) - 1:
-                    prev, curr = path[step], path[step + 1]
-                    step_cost, energy_multiplier = stepcost_calc(prev)
-                    energy_cost = step_cost * energy_multiplier
-                    total_step_cost += step_cost
-                    total_energy += energy_cost
-                    game_state.energy = energy_multiplier
-                    if curr in hexagons_legend["TR"]["coordinate"]:
-                        collected.add(curr)
-                    if curr in hexagons_legend.get("T4", {}).get("coordinate", []):
-                        collected.clear()
-                    step += 1
-                elif evt.key == pygame.K_LEFT and step > 0:
-                    step -= 1
-                    total_step_cost = 0
-                    total_energy = 0
-                    game_state.energy = 1.0
-                    collected.clear()
-                    for i in range(step):
-                        p0, p1 = path[i], path[i + 1]
-                        step_cost, energy_multiplier = stepcost_calc(p0)
-                        energy_cost = step_cost * energy_multiplier
-                        total_step_cost += step_cost
-                        total_energy += energy_cost
-                        game_state.energy = energy_multiplier
-                        if p1 in hexagons_legend["TR"]["coordinate"]:
-                            collected.add(p1)
-                        if p1 in hexagons_legend.get("T4", {}).get("coordinate", []):
-                            collected.clear()
+            elif evt.type == pygame.KEYDOWN and not path_state.auto:
+                if evt.key == pygame.K_RIGHT and path_state.step < len(path) - 1:
+                    path_state.advance_step(path)
+                elif evt.key == pygame.K_LEFT and path_state.step > 0:
+                    path_state.step -= 1
+                    path_state.update_costs_to_step(path, path_state.step)
 
 if __name__ == "__main__":
     pygame.init()
     pygame.display.set_caption("A* Treasure Collection Visualization")
     screen = pygame.display.set_mode((screen_width, screen_height))
+    
     start = (0, 0)
     path, cost = collect_treasure(start)
     path_visualization(path)
